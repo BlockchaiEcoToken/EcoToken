@@ -114,14 +114,14 @@ contract StandardToken is BasicToken, ERC20 {
     return allowed[_owner][_spender];
   }
 }
-contract TeuToken is StandardToken, Ownable{
+contract Becotoken is StandardToken, Ownable{
   string public name = "Blockchain EcoToken";
   string public symbol = "BET";
   uint public decimals = 18;
 
   event TokenBurned(uint256 value);
   
-  function TeuToken() public {
+  function EcoToken() public {
     totalSupply = (10 ** 8) * (10 ** decimals);
     balances[msg.sender] = totalSupply;
   }
@@ -135,7 +135,7 @@ contract TeuToken is StandardToken, Ownable{
 
 }
 
-contract teuInitialTokenSale is Ownable {
+contract EcoInitialTokenSale is Ownable {
 	using SafeMath for uint256;
 
     event LogContribution(address indexed _contributor, uint256 _etherAmount, uint256 _basicTokenAmount, uint256 _timeBonusTokenAmount, uint256 _volumeBonusTokenAmount);
@@ -145,7 +145,7 @@ contract teuInitialTokenSale is Ownable {
     event LogTokenCollected(address indexed _contributer, uint256 _collectedEtherAmount, uint256 _collectedTokenAmount);
 
 
-    TeuToken			                constant private		token = TeuToken(0x5269A8A7d99B607A62ADCdB977114aADF9b57E56); 
+    EcoToken			                constant private		token = EcoToken(0x5269A8A7d99B607A62ADCdB977114aADF9b57E56); 
     address		                        constant private		etherHolderWallet = 0x5269A8A7d99B607A62ADCdB977114aADF9b57E56;
     uint256		                        constant private 	    minContribution = 100 finney;
     uint                                constant private        saleStart = 1519552800;
