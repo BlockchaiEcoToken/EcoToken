@@ -1,25 +1,52 @@
-pragma solidity 0.4.19;
+pragma solidity 0.4.18;
 
+/**
+ * @title Ownable
+ * @dev The Ownable contract has an owner address, and provides basic authorization control 
+ * functions, this simplifies the implementation of "user permissions". 
+ */
 contract Ownable {
   address public owner;
 
+
+  /** 
+   * @dev The Ownable constructor sets the original `owner` of the contract to the sender
+   * account.
+   */
   function Ownable() public {
     owner = msg.sender;
   }
 
+
+  /**
+   * @dev revert()s if called by any account other than the owner. 
+   */
   modifier onlyOwner() {
     require(msg.sender == owner);
     _;
   }
 
+
+  /**
+   * @dev Allows the current owner to transfer control of the contract to a newOwner.
+   * @param newOwner The address to transfer ownership to. 
+   */
   function transferOwnership(address newOwner) onlyOwner public {
     if (newOwner != address(0)) {
       owner = newOwner;
     }
   }
+
 }
 
+
+
+/**
+ * Math operations with safety checks
+ */
 library SafeMath {
+  
+  
   function mul256(uint256 a, uint256 b) internal pure returns (uint256) {
     uint256 c = a * b;
     assert(a == 0 || c / a == b);
@@ -27,7 +54,7 @@ library SafeMath {
   }
 
   function div256(uint256 a, uint256 b) internal pure returns (uint256) {
-    require(b > 0); 
+    require(b > 0); // Solidity automatically revert()s when dividing by 0
     uint256 c = a / b;
     // assert(a == b * c + a % b); // There is no case in which this doesn't hold
     return c;
@@ -45,23 +72,28 @@ library SafeMath {
   }  
   
 
-  function max64(uint64 a, uint64 b) internal constant returns (uint64) {
+  function max64(uint64 a, uint64 b) internal pure returns (uint64) {
     return a >= b ? a : b;
   }
 
-  function min64(uint64 a, uint64 b) internal constant returns (uint64) {
+  function min64(uint64 a, uint64 b) internal pure returns (uint64) {
     return a < b ? a : b;
   }
 
-  function max256(uint256 a, uint256 b) internal constant returns (uint256) {
+  function max256(uint256 a, uint256 b) internal pure returns (uint256) {
     return a >= b ? a : b;
   }
 
-  function min256(uint256 a, uint256 b) internal constant returns (uint256) {
+  function min256(uint256 a, uint256 b) internal pure returns (uint256) {
     return a < b ? a : b;
   }
 }
 
+
+/**
+ * @title ERC20Basic
+ * @dev Simpler version of ERC20 interface
+ */
 contract ERC20Basic {
   uint256 public totalSupply;
   function balanceOf(address who) constant public returns (uint256);
@@ -69,55 +101,134 @@ contract ERC20Basic {
   event Transfer(address indexed from, address indexed to, uint256 value);
 }
 
+
+
+
+/**
+ * @title ERC20 interface
+ * @dev ERC20 interface with allowances. 
+ */
 contract ERC20 is ERC20Basic {
   function allowance(address owner, address spender) constant public returns (uint256);
   function transferFrom(address from, address to, uint256 value) public;
   function approve(address spender, uint256 value) public;
   event Approval(address indexed owner, address indexed spender, uint256 value);
 }
+
+
+
+
+/**
+ * @title Basic token
+ * @dev Basic version of StandardToken, with no allowances. 
+ */
 contract BasicToken is ERC20Basic {
   using SafeMath for uint256;
 
   mapping(address => uint256) balances;
+
+  /**
+   * @dev Fix for the ERC20 short address attack.
+   */
   modifier onlyPayloadSize(uint size) {
      require(msg.data.length >= size + 4);
      _;
   }
+
+  /**
+  * @dev transfer token for a specified address
+  * @param _to The address to transfer to.
+  * @param _value The amount to be transferred.
+  */
   function transfer(address _to, uint256 _value) onlyPayloadSize(2 * 32) public {
     balances[msg.sender] = balances[msg.sender].sub256(_value);
     balances[_to] = balances[_to].add256(_value);
     Transfer(msg.sender, _to, _value);
   }
+
+  /**
+  * @dev Gets the balance of the specified address.
+  * @param _owner The address to query the the balance of. 
+  * @return An uint representing the amount owned by the passed address.
+  */
   function balanceOf(address _owner) constant public returns (uint256 balance) {
     return balances[_owner];
   }
+
 }
 
+
+
+
+/**
+ * @title Standard ERC20 token
+ * @dev Implemantation of the basic standart token.
+ */
 contract StandardToken is BasicToken, ERC20 {
 
   mapping (address => mapping (address => uint256)) allowed;
 
+
+  /**
+   * @dev Transfer tokens from one address to another
+   * @param _from address The address which you want to send tokens from
+   * @param _to address The address which you want to transfer to
+   * @param _value uint the amout of tokens to be transfered
+   */
   function transferFrom(address _from, address _to, uint256 _value) onlyPayloadSize(3 * 32) public {
     var _allowance = allowed[_from][msg.sender];
+
+    // Check is not needed because sub(_allowance, _value) will already revert() if this condition is not met
+    // if (_value > _allowance) revert();
+
     balances[_to] = balances[_to].add256(_value);
     balances[_from] = balances[_from].sub256(_value);
     allowed[_from][msg.sender] = _allowance.sub256(_value);
     Transfer(_from, _to, _value);
   }
+
+  /**
+   * @dev Aprove the passed address to spend the specified amount of tokens on behalf of msg.sender.
+   * @param _spender The address which will spend the funds.
+   * @param _value The amount of tokens to be spent.
+   */
   function approve(address _spender, uint256 _value) public {
+
+    //  To change the approve amount you first have to reduce the addresses
+    //  allowance to zero by calling `approve(_spender, 0)` if it is not
+    //  already 0 to mitigate the race condition described here:
+    //  https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729
     if ((_value != 0) && (allowed[msg.sender][_spender] != 0)) revert();
 
     allowed[msg.sender][_spender] = _value;
     Approval(msg.sender, _spender, _value);
   }
+
+  /**
+   * @dev Function to check the amount of tokens than an owner allowed to a spender.
+   * @param _owner address The address which owns the funds.
+   * @param _spender address The address which will spend the funds.
+   * @return A uint specifing the amount of tokens still avaible for the spender.
+   */
   function allowance(address _owner, address _spender) constant public returns (uint256 remaining) {
     return allowed[_owner][_spender];
   }
+
+
 }
-contract Becotoken is StandardToken, Ownable{
-  string public name = "Blockchain EcoToken";
-  string public symbol = "BET";
-  uint public decimals = 18;
+
+
+
+/**
+ * @title EcoToken
+ * @dev The main EcoToken contract
+ * 
+ */
+ 
+contract EcoToken is StandardToken, Ownable{
+  string public name = "BlockchainEcoToken";
+  string public symbol = "ETS";
+  uint public decimals = 8;
 
   event TokenBurned(uint256 value);
   
@@ -126,6 +237,10 @@ contract Becotoken is StandardToken, Ownable{
     balances[msg.sender] = totalSupply;
   }
 
+  /**
+   * @dev Allows the owner to burn the token
+   * @param _value number of tokens to be burned.
+   */
   function burn(uint _value) onlyOwner public {
     require(balances[msg.sender] >= _value);
     balances[msg.sender] = balances[msg.sender].sub256(_value);
@@ -135,47 +250,75 @@ contract Becotoken is StandardToken, Ownable{
 
 }
 
+/**
+ * @title EcoInitialTokenSale 
+ * @dev The EcoToken ICO contract
+ * 
+ */
 contract EcoInitialTokenSale is Ownable {
 	using SafeMath for uint256;
 
     event LogContribution(address indexed _contributor, uint256 _etherAmount, uint256 _basicTokenAmount, uint256 _timeBonusTokenAmount, uint256 _volumeBonusTokenAmount);
     event LogContributionBitcoin(address indexed _contributor, uint256 _bitcoinAmount, uint256 _etherAmount, uint256 _basicTokenAmount, uint256 _timeBonusTokenAmount, uint256 _volumeBonusTokenAmount, uint _contributionDatetime);
-    event LogOffChainContribution(address indexed _contributor, uint256 _etherAmount, uint256 _tokenAmount, uint _contributionDatetime);
+    event LogOffChainContribution(address indexed _contributor, uint256 _etherAmount, uint256 _tokenAmount);
     event LogReferralAward(address indexed _refereeWallet, address indexed _referrerWallet, uint256 _referralBonusAmount);
-    event LogTokenCollected(address indexed _contributer, uint256 _collectedEtherAmount, uint256 _collectedTokenAmount);
+    event LogTokenCollected(address indexed _contributer, uint256 _collectedTokenAmount);
 
 
-    EcoToken			                constant private		token = EcoToken(0x5269A8A7d99B607A62ADCdB977114aADF9b57E56); 
-    address		                        constant private		etherHolderWallet = 0x5269A8A7d99B607A62ADCdB977114aADF9b57E56;
+    EcoToken			                constant private		token = EcoToken(0x2630331FF97cef5b3913fF2302862318ef980495); // hard coded due to token already deployed
+    address		                        constant private		etherHolderWallet = 0x009b41b6b980AaE361A511c7E1C799FD423A6E93; // hard coded due to deployment for once only
     uint256		                        constant private 	    minContribution = 100 finney;
-    uint                                constant private        saleStart = 1519552800;
-    uint                                constant private        saleEnd = 1519552800;
-    uint                                constant private        etherToTokenConversionRate = 400;
+    uint                                constant private        saleStart = 1423804400;
+    uint                                constant private        saleEnd = 1626498400;
+    uint                                constant private        etherToTokenConversionRate = 1000;
     uint                                constant private        referralAwardPercent = 20;
     uint256                             constant private        maxCollectableToken = 20 * 10 ** 9 * 10 ** 18;
 
-    mapping (address => uint256)                private     referralContribution;  
-    mapping (address => uint)                   private     lastContribitionDate;  
+    mapping (address => uint256)                private     referralContribution;  // record the referral contribution amount in ether for claiming of referral bonus
+    mapping (address => uint)                   private     lastContribitionDate;  // record the last contribution date/time for valid the referral bonus claiming period
 
-    mapping (address => uint256)                private     contribution;  
-    mapping (address => uint256)                private     collectableToken;  
-    mapping (address => uint8)                  private     clientIdentRejectList;  
-    bool                                        private     isCollectTokenStart = false;  
-    uint256                                     public      totalCollectableToken;  
+    mapping (address => uint256)                private     collectableToken;  // record the token amount to be collected of each contributor
+    mapping (address => uint8)                  private     clientIdentRejectList;  // record a list of contributors who do not pass the client identification process
+    bool                                        private     isCollectTokenStart = false;  // flag to indicate if token collection is started
+    uint256                                     public      totalCollectableToken;  // the total amount of token will be colleceted after considering all the contribution and bonus
 
+    //  ***** private helper functions ***************
+
+    
+
+    /**
+    * @dev get the current datetime
+    */   
     function getCurrentDatetime() private constant returns (uint) {
         return now; 
     }
- 
-    function getCurrentSaleDay() private saleIsOn returns (uint) {
+
+    /**
+    * @dev get the current sale day
+    */   
+    function getCurrentSaleDay() private saleIsOn view returns (uint) {
         return getCurrentDatetime().sub256(saleStart).div256(86400).add256(1);
     }
 
+    /**
+    * @dev to get the time bonus Percentage based on the no. of sale day(s)
+    * @param _days no of sale day to calculate the time bonus
+    */      
     function getTimeBonusPercent(uint _days) private pure returns (uint) {
-        if (_days <= 10)
-            return 50;
+       if (_days <= 45)
+            return 40;
+	     if (_days <= 30)
+            return 30;
+	     if (_days <= 15)
+            return 20;
+	     if (_days <= 1)
+            return 10;
         return 0;
-    }      
+
+    /**
+    * @dev to get the volumne bonus percentage based on the ether amount contributed
+    * @param _etherAmount ether amount contributed.
+    */          
     function getVolumeBonusPercent(uint256 _etherAmount) private pure returns (uint) {
 
         if (_etherAmount < 1 ether)
@@ -207,45 +350,89 @@ contract EcoInitialTokenSale is Ownable {
         return 0;
     }
     
-    function getTimeBonusAmount(uint256 _tokenAmount) private returns (uint256) {
+    /**
+    * @dev to get the time bonus amount given the token amount to be collected from contribution
+    * @param _tokenAmount token amount to be collected from contribution
+    */ 
+    function getTimeBonusAmount(uint256 _tokenAmount) private view returns (uint256) {
         return _tokenAmount.mul256(getTimeBonusPercent(getCurrentSaleDay())).div256(100);
     }
     
-    function getVolumeBonusAmount(uint256 _tokenAmount, uint256 _etherAmount) private returns (uint256) {
+    /**
+    * @dev to get the volume bonus amount given the token amount to be collected from contribution and the ether amount contributed
+    * @param _tokenAmount token amount to be collected from contribution
+    * @param _etherAmount ether amount contributed
+    */
+    function getVolumeBonusAmount(uint256 _tokenAmount, uint256 _etherAmount) private pure returns (uint256) {
         return _tokenAmount.mul256(getVolumeBonusPercent(_etherAmount)).div256(100);
     }
-    function getReferralBonusAmount(uint256 _etherAmount) private returns (uint256) {
+    
+    /**
+    * @dev to get the referral bonus amount given the ether amount contributed
+    * @param _etherAmount ether amount contributed
+    */
+    function getReferralBonusAmount(uint256 _etherAmount) private pure returns (uint256) {
         return _etherAmount.mul256(etherToTokenConversionRate).mul256(referralAwardPercent).div256(100);
     }
-    function getBasicTokenAmount(uint256 _etherAmount) private returns (uint256) {
+    
+    /**
+    * @dev to get the basic amount of token to be collected given the ether amount contributed
+    * @param _etherAmount ether amount contributed
+    */
+    function getBasicTokenAmount(uint256 _etherAmount) private pure returns (uint256) {
         return _etherAmount.mul256(etherToTokenConversionRate);
     }
   
+  
+    // ****** modifiers  ************
+
+    /**
+    * @dev modifier to allow contribution only when the sale is ON
+    */
     modifier saleIsOn() {
         require(getCurrentDatetime() >= saleStart && getCurrentDatetime() < saleEnd);
         _;
     }
 
+    /**
+    * @dev modifier to check if the sale is ended
+    */    
     modifier saleIsEnd() {
         require(getCurrentDatetime() >= saleEnd);
         _;
-    } 
+    }
+
+    /**
+    * @dev modifier to check if token is collectable
+    */    
     modifier tokenIsCollectable() {
         require(isCollectTokenStart);
         _;
     }
+    
+    /**
+    * @dev modifier to check if contribution is over the min. contribution amount
+    */    
     modifier overMinContribution(uint256 _etherAmount) {
         require(_etherAmount >= minContribution);
         _;
     }
+    
+    /**
+    * @dev modifier to check if max. token pool is not reached
+    */
     modifier underMaxTokenPool() {
         require(maxCollectableToken > totalCollectableToken);
         _;
     }
 
-    function depositForWithdrawal() public payable onlyOwner {
-        require(msg.value > 0);
-    }
+
+    //  ***** public transactional functions ***************
+
+
+    /**
+    * @dev called by contributors to record a contribution 
+    */
     function contribute() public payable saleIsOn overMinContribution(msg.value) underMaxTokenPool {
         uint256 _basicToken = getBasicTokenAmount(msg.value);
         uint256 _timeBonus = getTimeBonusAmount(_basicToken);
@@ -255,13 +442,20 @@ contract EcoInitialTokenSale is Ownable {
         lastContribitionDate[msg.sender] = getCurrentDatetime();
         referralContribution[msg.sender] = referralContribution[msg.sender].add256(msg.value);
         
-        contribution[msg.sender] = contribution[msg.sender].add256(msg.value);
         collectableToken[msg.sender] = collectableToken[msg.sender].add256(_totalToken);
         totalCollectableToken = totalCollectableToken.add256(_totalToken);
         assert(etherHolderWallet.send(msg.value));
 
         LogContribution(msg.sender, msg.value, _basicToken, _timeBonus, _volumeBonus);
     }
+
+    /**
+    * @dev called by contract owner to record a off chain contribution by Bitcoin. The token collection process is the same as those ether contributors
+    * @param _bitcoinAmount bitcoin amount contributed
+    * @param _etherAmount ether equivalent amount contributed
+    * @param _contributorWallet wallet address of contributor which will be used for token collection
+    * @param _contributionDatetime date/time of contribution. For calculating time bonus and claiming referral bonus.
+    */
     function contributeByBitcoin(uint256 _bitcoinAmount, uint256 _etherAmount, address _contributorWallet, uint _contributionDatetime) public overMinContribution(_etherAmount) onlyOwner {
         uint256 _basicToken = getBasicTokenAmount(_etherAmount);
         uint256 _timeBonus = getTimeBonusAmount(_basicToken);
@@ -276,17 +470,27 @@ contract EcoInitialTokenSale is Ownable {
         totalCollectableToken = totalCollectableToken.add256(_totalToken);
         LogContributionBitcoin(_contributorWallet, _bitcoinAmount, _etherAmount, _basicToken, _timeBonus, _volumeBonus, _contributionDatetime);
     }
-    function recordOffChainContribute(uint256 _etherAmount, address _contributorWallet, uint256 _tokenAmount, uint _contributionDatetime) public overMinContribution(_etherAmount) onlyOwner {
+    
+    /**
+    * @dev called by contract owner to record a off chain contribution by Ether. The token are distributed off chain already.  The contributor can only entitle referral bonus through this smart contract
+    * @param _etherAmount ether equivalent amount contributed
+    * @param _contributorWallet wallet address of contributor which will be used for referral bonus collection
+    * @param _tokenAmount amunt of token distributed to the contributor. For reference only in the event log
+    */
+    function recordOffChainContribute(uint256 _etherAmount, address _contributorWallet, uint256 _tokenAmount) public overMinContribution(_etherAmount) onlyOwner {
 
-	    if (_contributionDatetime > lastContribitionDate[_contributorWallet])
-            lastContribitionDate[_contributorWallet] = _contributionDatetime;
-        referralContribution[_contributorWallet] = referralContribution[_contributorWallet].add256(_etherAmount);
-        LogOffChainContribution(_contributorWallet, _etherAmount, _tokenAmount, _contributionDatetime);
+        lastContribitionDate[_contributorWallet] = now;
+        LogOffChainContribution(_contributorWallet, _etherAmount, _tokenAmount);
     }    
 
+    /**
+    * @dev called by contributor to claim the referral bonus
+    * @param _referrerWallet wallet address of referrer.  Referrer must also be a contributor
+    */
     function referral(address _referrerWallet) public {
+	require (msg.sender != _referrerWallet);
         require (referralContribution[msg.sender] > 0);
-        require (contribution[_referrerWallet] > 0);
+        require (lastContribitionDate[_referrerWallet] > 0);
         require (getCurrentDatetime() - lastContribitionDate[msg.sender] <= (4 * 24 * 60 * 60));
         
         uint256 _referralBonus = getReferralBonusAmount(referralContribution[msg.sender]);
@@ -297,6 +501,21 @@ contract EcoInitialTokenSale is Ownable {
         totalCollectableToken = totalCollectableToken.add256(_referralBonus).add256(_referralBonus);
         LogReferralAward(msg.sender, _referrerWallet, _referralBonus);
     }
+    
+    /**
+    * @dev called by contract owener to register a list of rejected clients who cannot pass the client identification process.  At most 10 clients can be set at a time
+    * @param client1 wallet address of client #1
+    * @param client2 wallet address of client #2
+    * @param client3 wallet address of client #3
+    * @param client4 wallet address of client #4
+    * @param client5 wallet address of client #5
+    * @param client6 wallet address of client #6
+    * @param client7 wallet address of client #7
+    * @param client8 wallet address of client #8
+    * @param client9 wallet address of client #9
+    * @param client10 wallet address of client #10
+    * @param _valueToSet  1 - add to reject list, 0 - remove from reject list
+    */
     function setClientIdentRejectList(
         address client1,
         address client2,
@@ -307,7 +526,8 @@ contract EcoInitialTokenSale is Ownable {
         address client7,
         address client8,
         address client9,
-        address client10, uint8 _valueToSet
+        address client10, 
+	uint8 _valueToSet
     ) public onlyOwner {
         if (client1 != address(0))
             clientIdentRejectList[client1] = _valueToSet;
@@ -331,49 +551,69 @@ contract EcoInitialTokenSale is Ownable {
             clientIdentRejectList[client10] = _valueToSet;
     }
     
+    /**
+    * @dev called by contract owner to flag to start the token collection process
+    */
     function setTokenCollectable() public onlyOwner saleIsEnd {
         isCollectTokenStart = true;
     }
-    function setTokenUncollectable() public onlyOwner saleIsEnd {
-        isCollectTokenStart = false;
-    }
+    
+    /**
+    * @dev called by contributor to collect tokens.  If they are rejected by the client identification process, error will be thrown
+    */
     function collectToken() public tokenIsCollectable {
-	uint256 _cont = contribution[msg.sender];
 	uint256 _collToken = collectableToken[msg.sender];
-        contribution[msg.sender] = 0;
+
+	require(clientIdentRejectList[msg.sender] <= 0);
+        require(_collToken > 0);
+
         collectableToken[msg.sender] = 0;
 
-
-        if (clientIdentRejectList[msg.sender] > 0) {
-            require(_cont > 0);
-            
-            assert(msg.sender.send(_cont));
-            LogTokenCollected(msg.sender, _cont, 0);
-        }
-        else {
-            require(_collToken > 0);
-            token.transfer(msg.sender, _collToken);
-            LogTokenCollected(msg.sender, 0, _collToken);
-        }
+        token.transfer(msg.sender, _collToken);
+        LogTokenCollected(msg.sender, _collToken);
     }
+
+    /**
+    * @dev Allow owner to transfer out the token left in the contract
+    * @param _to address to transfer to
+    * @param _amount amount to transfer
+    */  
     function transferTokenOut(address _to, uint256 _amount) public onlyOwner {
         token.transfer(_to, _amount);
     }
+    
+    /**
+    * @dev Allow owner to transfer out the ether left in the contract
+    * @param _to address to transfer to
+    * @param _amount amount to transfer
+    */  
     function transferEtherOut(address _to, uint256 _amount) public onlyOwner {
         assert(_to.send(_amount));
     }  
-   
-    function contributionOf(address _contributor) public constant returns (uint256) {
-        return contribution[_contributor] ;
-    }
+    
 
+    //  ***** public constant functions ***************
+
+    /**
+    * @dev to get the amount of token collectable by any contributor
+    * @param _contributor contributor to get amont
+    */  
     function collectableTokenOf(address _contributor) public constant returns (uint256) {
         return collectableToken[_contributor] ;
     }
     
+    /**
+    * @dev to get the amount of token collectable by any contributor
+    * @param _contributor contributor to get amont
+    */  
     function isClientIdentRejectedOf(address _contributor) public constant returns (uint8) {
         return clientIdentRejectList[_contributor];
     }    
+    
+    /**
+    * @dev Fallback function which receives ether and create the appropriate number of tokens for the 
+    * msg.sender.
+    */
     function() external payable {
         contribute();
     }
